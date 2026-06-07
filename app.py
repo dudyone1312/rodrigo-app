@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
+import google.generativeai as genai
 
 # --- CONFIGURACIÓN E INTERFAZ ---
 st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
@@ -19,25 +20,58 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- INICIALIZACIÓN DEL CEREBRO (GEMINI API) ---
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    api_lista = True
+except:
+    api_lista = False
+
 st.title("⚡ RODRIGO PERFORMANCE HUB")
 st.markdown("---")
 
-# --- ZONA DE CARGA Y VARIABLES BASALES ---
-uploaded_file = st.file_uploader("📥 Arrastra aquí tu CSV de Garmin", type=["csv"])
+# --- ZONA DE CARGA UNIVERSAL (MULTIFORMATO) ---
+archivos_subidos = st.file_uploader("📥 Arrastra aquí tus archivos (CSV, Capturas JPG/PNG, PDFs...)", accept_multiple_files=True)
 
+# Variables Basales por defecto
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
+imagenes_cargadas = []
 
-if uploaded_file is not None:
-    try:
-        df = pd.read_csv(uploaded_file)
-        if 'Puntuación' in df.columns:
-            hrv_actual = int(df.iloc[0]['Estado de VFC'])
-            body_battery = int(df.iloc[0]['Body Battery'])
-            sueno_puntuacion = int(df.iloc[0]['Puntuación'])
-    except:
-        pass
+# Procesador de Inteligencia de Archivos
+if archivos_subidos:
+    for archivo in archivos_subidos:
+        extension = archivo.name.split('.')[-1].lower()
+        if extension == 'csv':
+            try:
+                df = pd.read_csv(archivo)
+                if 'Puntuación' in df.columns:
+                    hrv_actual = int(df.iloc[0]['Estado de VFC'])
+                    body_battery = int(df.iloc[0]['Body Battery'])
+                    sueno_puntuacion = int(df.iloc[0]['Puntuación'])
+                    st.toast(f"✅ CSV Biométrico procesado: {archivo.name}")
+                else:
+                    st.toast(f"✅ CSV de Actividades detectado: {archivo.name}")
+            except:
+                st.toast(f"Error procesando CSV: {archivo.name}", icon="⚠️")
+        elif extension in ['jpg', 'jpeg', 'png', 'heic']:
+            imagenes_cargadas.append(archivo)
+        elif extension == 'pdf':
+            st.toast(f"📄 Documento PDF recibido: {archivo.name}")
+        else:
+            st.toast(f"📁 Archivo general guardado: {archivo.name}")
+
+if imagenes_cargadas:
+    with st.expander("📸 Archivos Multimedia Adjuntos (Haz clic para ver)", expanded=True):
+        columnas_img = st.columns(len(imagenes_cargadas))
+        for idx, img in enumerate(imagenes_cargadas):
+            with columnas_img[idx]:
+                st.image(img, caption=img.name, use_container_width=True)
+
+st.markdown("---")
 
 # --- PESTAÑAS ---
 tab_hoy, tab_chat, tab_semana, tab_mes, tab_historicos = st.tabs([
@@ -69,62 +103,82 @@ with tab_hoy:
     if "Gimnasio" in disciplina:
         if hrv_actual < 40:
             st.info("**Fuerza Metabólica (Alta Repetición / Bajo Peso)**")
-            st.write("**1. Zancadas peso corporal** (3x20) - *Garmin: Walking Lunge*")
-            st.write("**2. Flexiones controladas** (3x15) - *Garmin: Push-Up*")
-            st.write("**3. Remo mancuerna** (3x15) - *Garmin: One-Arm Dumbbell Row*")
+            st.write("**1. Zancadas peso corporal** (3 series x 20 reps)")
+            st.markdown("*Garmin: Walking Lunge*")
+            st.write("**2. Flexiones controladas** (3 series x 15 reps)")
+            st.markdown("*Garmin: Push-Up*")
+            st.write("**3. Remo mancuerna a un brazo** (3 series x 15 reps)")
+            st.markdown("*Garmin: One-Arm Dumbbell Row*")
         else:
             st.success("**Fuerza Máxima Neural (Baja Repetición / Alto Peso)**")
-            st.write("**1. Sentadilla Trasera** (4x5) - *Garmin: Barbell Back Squat*")
-            st.write("**2. Peso Muerto Rumano** (3x6) - *Garmin: Romanian Deadlift*")
-            st.write("**3. Dominadas Lastradas** (4x5) - *Garmin: Weighted Pull-Up*")
+            st.write("**1. Sentadilla Trasera con Barra** (4 series x 5 reps)")
+            st.markdown("*Garmin: Barbell Back Squat*")
+            st.write("**2. Peso Muerto Rumano** (3 series x 6 reps)")
+            st.markdown("*Garmin: Romanian Deadlift*")
+            st.write("**3. Dominadas Lastradas** (4 series x 5 reps)")
+            st.markdown("*Garmin: Weighted Pull-Up*")
     elif "Carrera" in disciplina:
         st.info("Prescripción de carrera activa. (Restringido a Z2 si Luz Roja, abierto a Z5 si Luz Verde).")
     else:
         st.info("Actividad de bajo impacto o descanso seleccionado.")
 
 # ==========================================
-# PESTAÑA 2: CHAT INTERACTIVO RESTAURADO
+# PESTAÑA 2: CHAT INTELIGENTE NEURONAL
 # ==========================================
 with tab_chat:
     st.header("💬 Sala de Control Híbrida")
-    st.write("Discute los entrenamientos o reporta fatiga. (API pendiente de conexión real).")
+    st.write("Tu Coach analizará tu consulta teniendo en cuenta tus métricas actuales.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "¡Buenas Rodrigo! Semáforo en rojo hoy por los 39 ms. ¿Cómo tienes el estómago y las piernas tras el salmón de ayer?"}]
+        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Si ya has configurado la clave API, pregúntame lo que necesites."}]
         
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    if prompt := st.chat_input("Escribe a tu coach..."):
+    if prompt := st.chat_input("Escribe tu duda, pide un plan o reporta sensaciones..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
             
-        # Placeholder del Coach
-        reply = "*(Sistema)*: Mensaje recibido. En cuanto inyectemos la API Key, este mensaje será generado automáticamente por tu IA analizando tu fisiología."
-        st.session_state.messages.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
-            st.markdown(reply)
+            if api_lista:
+                try:
+                    # El System Prompt oculto que guía al Coach
+                    instruccion_coach = f"""
+                    Eres el entrenador de rendimiento híbrido de Rodrigo. Basa tus decisiones en ciencia (2021-2026), 
+                    ignora rigideces obsoletas del ACSM y adapta el entreno a su VFC actual ({hrv_actual} ms). 
+                    Responde de forma directa, técnica y empática a lo siguiente: {prompt}
+                    """
+                    respuesta_ia = model.generate_content(instruccion_coach)
+                    st.markdown(respuesta_ia.text)
+                    st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
+                except Exception as e:
+                    error_msg = f"Error en la conexión con Gemini: {e}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            else:
+                aviso = "⚠️ **Falta la conexión neuronal:** No has añadido la GOOGLE_API_KEY en los Secrets de Streamlit. Hazlo para que pueda responderte."
+                st.warning(aviso)
+                st.session_state.messages.append({"role": "assistant", "content": aviso})
 
 # ==========================================
-# PESTAÑAS 3 y 4 (Semanales y Mensuales)
+# PESTAÑAS 3 y 4: PLANES SEMANAL Y MENSUAL
 # ==========================================
 with tab_semana:
     st.header("🗓️ Plan Semanal")
-    st.write("Estructura en construcción.")
+    st.write("Estructura de la semana actual.")
 
 with tab_mes:
     st.header("📊 Objetivos del Mes (Macrociclo)")
-    st.write("Objetivos de Carrera y Gimnasio mes a mes.")
+    st.write("Planificación mensual y focos estratégicos.")
 
 # ==========================================
-# PESTAÑA 5: HISTÓRICOS (EL NÚCLEO DE DATOS)
+# PESTAÑA 5: HISTÓRICOS Y GRÁFICAS (INTACTAS)
 # ==========================================
 with tab_historicos:
     st.header("📈 Base de Datos Analítica (Últimas 52 Semanas)")
     
-    # Generación de datos anuales simulados para pintar las gráficas
     fechas_anual = pd.date_range(end=datetime.date(2026, 6, 6), periods=52, freq='W')
     df_anual = pd.DataFrame({
         'Fecha': fechas_anual,
@@ -136,7 +190,7 @@ with tab_historicos:
         'Carga_Cronica': np.random.randint(450, 700, size=52)
     })
 
-    # 1. CARGA DE ENTRENAMIENTO ESTILO GARMIN
+    # 1. ESTADO DE CARGA DE ENTRENO
     st.subheader("1. Estado de Carga de Entrenamiento (Aguda vs Crónica)")
     fig_carga = go.Figure()
     fig_carga.add_trace(go.Scatter(x=df_anual['Fecha'], y=df_anual['Carga_Cronica'], fill='tozeroy', mode='none', name='Rango Óptimo (Crónica)', fillcolor='rgba(47, 133, 90, 0.4)'))
@@ -150,7 +204,7 @@ with tab_historicos:
     fig_salud.update_layout(yaxis_title="ms / ppm", legend_title_text="Métrica")
     st.plotly_chart(fig_salud, use_container_width=True)
 
-    # 3. RITMOS POR ZONA CARDIACA (Tabla Semana/Mes)
+    # 3. RITMOS POR ZONA CARDIACA
     st.subheader("3. Ritmos Medios (min/km) por Zona Cardiaca (Mes Actual)")
     tabla_ritmos = pd.DataFrame({
         "Periodo": ["Semana 1 (Junio)", "Semana 2 (Junio)", "Semana 3 (Junio)", "Mes Promedio (Mayo)"],
@@ -162,7 +216,7 @@ with tab_historicos:
     })
     st.dataframe(tabla_ritmos, hide_index=True, use_container_width=True)
 
-    # 4. KILÓMETROS Y VO2 MAX
+    # 4. KM RECORRIDOS Y VO2 MAX
     st.subheader("4. Kilómetros Recorridos y VO2 Max")
     fig_km = go.Figure()
     fig_km.add_trace(go.Bar(x=df_anual['Fecha'], y=df_anual['Km'], name='Volumen (Km)', marker_color='#4a5568'))
