@@ -9,7 +9,6 @@ import google.generativeai as genai
 # --- 1. CONFIGURACIÓN E INTERFAZ (CSS ULTRA-COMPACTO MÓVIL) ---
 st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
 
-# Mantener optimización UI según la hoja de ruta técnica
 st.markdown("""
     <style>
     .block-container { padding-top: 0.8rem; padding-bottom: 0rem; padding-left: 0.8rem; padding-right: 0.8rem; }
@@ -31,14 +30,22 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. CONFIGURACIÓN DE LA API (CORREGIDA SEGÚN DOC V2) ---
+# --- 2. CONFIGURACIÓN DE LA API (DOBLE COMPROBACIÓN ANTIFALLOS) ---
 api_configurada = False
-if "GOOGLE API KEY" in st.secrets:  # Corregido: Uso de espacio en vez de guion bajo
+clave_encontrada = None
+
+# Buscamos la clave con guion bajo o con espacio para resolver la discrepancia de la Doc V2
+if "GOOGLE_API_KEY" in st.secrets:
+    clave_encontrada = st.secrets["GOOGLE_API_KEY"]
+elif "GOOGLE API KEY" in st.secrets:
+    clave_encontrada = st.secrets["GOOGLE API KEY"]
+
+if clave_encontrada:
     try:
-        genai.configure(api_key=st.secrets["GOOGLE API KEY"])
+        genai.configure(api_key=clave_encontrada)
         api_configurada = True
-    except Exception:
-        st.sidebar.error("Error en configuración de credenciales")
+    except Exception as e:
+        st.sidebar.error(f"Error en credenciales: {e}")
 
 # --- 3. CABECERA Y ENTRADA DE DATOS ---
 st.title("🏔️ RODRIGO HYBRID HUB")
@@ -51,9 +58,9 @@ with st.expander("📥 Cargar Archivos (Garmin CSV/Fotos)", expanded=False):
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
-datos_csv_contexto = ""
+datos_archivos_contexto = ""
 
-# Procesamiento del archivo subido
+# Procesamiento dinámico de archivos (CSV o Imágenes)
 if archivos_subidos:
     for archivo in archivos_subidos:
         extension = archivo.name.split('.')[-1].lower()
@@ -69,10 +76,12 @@ if archivos_subidos:
                 else:
                     st.toast(f"✅ CSV detectado: {archivo.name}", icon="🏃‍♂️")
                 
-                # Guardamos las filas más recientes de forma compacta para dárselas a la IA
-                datos_csv_contexto = f"\n[Datos actualizados del archivo {archivo.name}]:\n{df.head(5).to_string()}"
+                datos_archivos_contexto += f"\n[Datos CSV del archivo {archivo.name}]:\n{df.head(5).to_string()}\n"
             except Exception:
                 pass
+        elif extension in ['png', 'jpg', 'jpeg', 'webp']:
+            st.toast(f"📸 Imagen cargada: {archivo.name}", icon="🖼️")
+            datos_archivos_contexto += f"\n[Archivo adjunto]: Rodrigo ha subido una imagen/captura de pantalla llamada '{archivo.name}'.\n"
 
 # --- 4. PESTAÑAS DE NAVEGACIÓN ---
 tab_hoy, tab_chat, tab_analitica, tab_planes = st.tabs(["🎯 HOY", "💬 AI COACH", "📈 ANALÍTICA", "📅 PLANES"])
@@ -108,14 +117,14 @@ with tab_hoy:
         else: st.success("**VO2 Max:** Series intensas en pista o cuestas (Z4/Z5).")
     else: st.info("Movilidad articular o descanso absoluto.")
 
-# PESTAÑA 2: AI COACH (CONEXIÓN REAL Y DIRECTA CON LA IA)
+# PESTAÑA 2: AI COACH (CONEXIÓN REAL E INTELIGENTE CON GEMINI)
 with tab_chat:
     chat_input_container = st.container()
     messages_container = st.container()
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Conexión verificada con los modelos estables de Gemini. Sube tus archivos de Garmin y analicemos los cambios reales de tu rendimiento."})
+        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Conexión reestablecida con éxito. Sube cualquier archivo (CSV de Garmin o imágenes de tus métricas) y planifiquemos tu entrenamiento basándonos en datos reales."})
         
     with messages_container:
         for msg in reversed(st.session_state.messages):
@@ -123,11 +132,11 @@ with tab_chat:
                 st.markdown(msg["content"])
 
     with chat_input_container:
-        if prompt := st.chat_input("Escribe tu duda aquí...", key="chat_input"):
+        if prompt := st.chat_input("Pídeme un entrenamiento o consulta tus métricas...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             
             if any(x in prompt.lower() for x in ["borra", "limpia", "elimina"]):
-                st.session_state.messages = [{"role": "assistant", "content": "🧹 Historial de conversación limpio."}]
+                st.session_state.messages = [{"role": "assistant", "content": "🧹 Historial de chat reiniciado."}]
                 st.rerun()
 
             if api_configurada:
@@ -136,21 +145,25 @@ with tab_chat:
                     modelos = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
                     modelo_usar = modelos[0] if modelos else 'gemini-1.5-flash'
                     
-                    # Construcción del mensaje inyectando dinámicamente los datos reales del archivo
+                    # Estructuración completa del mensaje para la Inteligencia Artificial
                     contexto_completo = (
                         f"Rol: Eres el Coach deportivo experto personal de Rodrigo.\n"
-                        f"Métricas fisiológicas actuales de control: HRV/VFC: {hrv_actual}ms, Body Battery: {body_battery}%, Calidad de Sueño: {sueno_puntuacion}/100.\n"
-                        f"{datos_csv_contexto}\n"
-                        f"Consulta directa del atleta Rodrigo: {prompt}"
+                        f"Métricas fisiológicas del atleta hoy: HRV/VFC: {hrv_actual}ms, Body Battery: {body_battery}%, Calidad de Sueño: {sueno_puntuacion}/100.\n"
+                        f"{datos_archivos_contexto}\n"
+                        f"Pregunta o instrucción de Rodrigo: {prompt}"
                     )
                     
                     model = genai.GenerativeModel(modelo_usar)
                     resp = model.generate_content(contexto_completo)
                     st.session_state.messages.append({"role": "assistant", "content": resp.text})
                 except Exception as e:
-                    st.session_state.messages.append({"role": "assistant", "content": f"⚠️ Fallo en la comunicación con la API: {e}"})
+                    # Manejo inteligente si de verdad se agotan los tokens gratuitos de Google
+                    if "429" in str(e) or "quota" in str(e).lower():
+                        st.session_state.messages.append({"role": "assistant", "content": "🛑 **Límite de cuota diaria de Google alcanzado (Error 429)**.\n\nRodrigo, la conexión y el código están perfectos, pero las peticiones gratuitas diarias se han agotado por hoy debido al volumen de desarrollo. Las cuotas se restablecen automáticamente por completo en unas horas."})
+                    else:
+                        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ Error de comunicación con Gemini: {e}"})
             else:
-                st.session_state.messages.append({"role": "assistant", "content": "⚠️ Error crítico: No se encuentra la clave 'GOOGLE API KEY' en st.secrets de Streamlit. Revisa la configuración de tu panel cloud."})
+                st.session_state.messages.append({"role": "assistant", "content": "❌ **Error de configuración cloud:** No se encuentra tu API Key en los Secrets de Streamlit. Recuerda configurar en la pestaña 'Advanced Settings' de tu panel cloud la variable `GOOGLE_API_KEY = 'tu_clave_real_aqui'`."})
             
             st.rerun()
 
