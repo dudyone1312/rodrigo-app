@@ -20,19 +20,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INICIALIZACIÓN NEURONAL (OPTIMIZADA PARA FREE TIER) ---
-# Solo configuramos la llave de forma pasiva para no gastar cuota de peticiones al arrancar.
-api_lista = False
-model = None
-
+# --- CONFIGURACIÓN PASIVA DE LA API ---
+api_configurada = False
 if "GOOGLE_API_KEY" in st.secrets:
     try:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        # Usamos el modelo 1.5 Flash estable que está habilitado en Europa gratis
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        api_lista = True
+        api_configurada = True
     except Exception as e:
-        st.sidebar.error(f"Error de configuración API: {e}")
+        st.sidebar.error(f"Error al configurar la llave: {e}")
 
 st.title("⚡ RODRIGO PERFORMANCE HUB")
 st.markdown("---")
@@ -40,7 +35,7 @@ st.markdown("---")
 # --- ZONA DE CARGA UNIVERSAL (MULTIFORMATO) ---
 archivos_subidos = st.file_uploader("📥 Arrastra aquí tus archivos (CSV, Capturas JPG/PNG, PDFs...)", accept_multiple_files=True)
 
-# Variables Basales por defecto (simulación inicial)
+# Variables Basales por defecto
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
@@ -129,11 +124,11 @@ with tab_hoy:
 # PESTAÑA 2: CHAT INTELIGENTE NEURONAL
 # ==========================================
 with tab_chat:
-    st.header("💬 AI Coach Híbrido (Gemini 1.5 Flash)")
-    st.write("Plantea tus dudas de entrenamiento, ajusta tu plan o consulta sobre la interferencia entre carrera y pesas.")
+    st.header("💬 AI Coach Híbrido (Multi-Modelo de Respaldo)")
+    st.write("Plantea tus dudas de entrenamiento o reporta tus sensaciones. El sistema buscará automáticamente el canal gratuito activo en Europa.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"¡Hola Rodrigo! Conexión Free Tier activa y segura. Tu VFC hoy es de {hrv_actual} ms. ¿Cómo planteamos el entrenamiento?"}]
+        st.session_state.messages = [{"role": "assistant", "content": f"¡Hola Rodrigo! Conexión Free Tier reconfigurada. Tu VFC de hoy es de {hrv_actual} ms. ¿Qué aspecto de tu rendimiento quieres optimizar hoy?"}]
         
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -145,29 +140,44 @@ with tab_chat:
             st.markdown(prompt)
             
         with st.chat_message("assistant"):
-            if api_lista and model is not None:
-                try:
-                    # Contexto enriquecido para que la IA sepa en todo momento tus datos vitales
-                    contexto_base = f"""
-                    Eres el entrenador de rendimiento deportivo híbrido de Rodrigo.
-                    Datos fisiológicos de hoy de Rodrigo: HRV: {hrv_actual}ms, Body Battery: {body_battery}, Calidad Sueño: {sueno_puntuacion}.
-                    Basa tus consejos en la fisiología del ejercicio moderna. Sé conciso, técnico pero muy directo.
-                    Responde a lo siguiente: {prompt}
-                    """
-                    respuesta_ia = model.generate_content(contexto_base)
-                    st.markdown(respuesta_ia.text)
-                    st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
-                except Exception as e:
-                    # Captura de errores en vivo para ver qué dice Google
-                    st.error(f"Error de conexión con Google: {str(e)}")
+            if api_configurada:
+                contexto_base = f"""
+                Eres el entrenador de rendimiento deportivo híbrido de Rodrigo.
+                Datos fisiológicos de hoy de Rodrigo: HRV: {hrv_actual}ms, Body Battery: {body_battery}, Calidad Sueño: {sueno_puntuacion}.
+                Basa tus consejos en la fisiología del ejercicio moderna. Sé conciso, técnico pero muy directo.
+                Responde a lo siguiente: {prompt}
+                """
+                
+                respuesta_conseguida = False
+                errores_acumulados = ""
+                
+                # Lista con los nombres técnicos exactos requeridos por la versión API v1beta
+                modelos_a_probar = ['gemini-1.5-flash-latest', 'gemini-1.5-flash-002', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-002']
+                
+                for nombre_modelo in modelos_a_probar:
+                    try:
+                        model = genai.GenerativeModel(nombre_modelo)
+                        respuesta_ia = model.generate_content(contexto_base)
+                        st.markdown(respuesta_ia.text)
+                        st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
+                        respuesta_conseguida = True
+                        break  # Si funciona, rompemos el bucle
+                    except Exception as e_modelo:
+                        errores_acumulados += f"• {nombre_modelo}: {str(e_modelo)}\n"
+                        continue
+                
+                if not respuesta_conseguida:
+                    st.error("❌ Todos los modelos de la capa gratuita devolvieron un error de conexión.")
+                    with st.expander("🔍 Ver registro técnico de errores para diagnóstico"):
+                        st.code(errores_acumulados)
             else:
-                st.warning("⚠️ La API Key no está configurada correctamente en los Secrets de Streamlit.")
+                st.warning("⚠️ La API Key no está configurada en los Secrets de Streamlit.")
 
 # ==========================================
 # PESTAÑAS 3 y 4: PLANES SEMANAL Y MENSUAL
 # ==========================================
 with tab_semana:
-    st.header("🗓️ Microciclo Semanal")
+    st.header("🗓 nighttime Microciclo Semanal")
     st.write("Estructura de la semana actual. Sube tu CSV de calendario para actualizar.")
 
 with tab_mes:
@@ -207,7 +217,7 @@ with tab_historicos:
     with c1:
         st.subheader("3. Ritmos por Zona Cardiaca")
         tabla_ritmos = pd.DataFrame({
-            "Zona": ["Z1 (<130 ppm)", "Z2 (131-148)", "Z3 (149-162)", "Z4 (163-175)", "Z5 (>176 ppm)"],
+            "Zona": ["Zona 1 (<130 ppm)", "Zona 2 (131-148)", "Zona 3 (149-162)", "Zona 4 (163-175)", "Zona 5 (>176 ppm)"],
             "Ritmo Medio (min/km)": ["6:25", "5:40", "5:05", "4:30", "3:55"]
         })
         st.dataframe(tabla_ritmos, hide_index=True, use_container_width=True)
