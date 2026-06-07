@@ -20,26 +20,32 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INICIALIZACIÓN DEL CEREBRO CON AUTO-DETECCIÓN ---
+# --- INICIALIZACIÓN DEL CEREBRO CON DIAGNÓSTICO EN PANTALLA ---
 api_lista = False
 model = None
+error_diagnostico = ""
 
 try:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=api_key)
-    
-    # Sistema de tolerancia a fallos de modelos (v1beta vs v1)
-    for nombre_modelo in ['gemini-2.0-flash', 'gemini-pro', 'gemini-1.5-flash']:
-        try:
-            model = genai.GenerativeModel(nombre_modelo)
-            # Hacemos una verificación rápida sin coste para comprobar si el modelo responde en este entorno
-            model.generate_content("test")
-            api_lista = True
-            break
-        except:
-            continue
-except Exception as e:
-    api_lista = False
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        genai.configure(api_key=api_key)
+        
+        # Probamos los modelos actuales en orden de eficiencia
+        for nombre_modelo in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']:
+            try:
+                test_model = genai.GenerativeModel(nombre_modelo)
+                # Intento de petición de control
+                test_model.generate_content("test")
+                model = test_model
+                api_lista = True
+                break
+            except Exception as e_modelo:
+                error_diagnostico += f"• {nombre_modelo}: {str(e_modelo)}\n"
+                continue
+    else:
+        error_diagnostico = "La clave 'GOOGLE_API_KEY' no se encuentra configurada en los Secrets de Streamlit."
+except Exception as e_general:
+    error_diagnostico = f"Error general en el módulo de configuración: {str(e_general)}"
 
 st.title("⚡ RODRIGO PERFORMANCE HUB")
 st.markdown("---")
@@ -142,7 +148,7 @@ with tab_chat:
     st.write("Tu Coach analizará tu consulta teniendo en cuenta tus métricas actuales.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Conexión de seguridad establecida. Pregúntame lo que necesites."}]
+        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Sistema de diagnóstico activo."}]
         
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -171,6 +177,7 @@ with tab_chat:
             else:
                 aviso = "⚠️ **Falta la conexión neuronal o los Secrets son incorrectos:** Revisa que hayas añadido la GOOGLE_API_KEY correctamente en la plataforma de Streamlit."
                 st.warning(aviso)
+                st.error(f"🔍 **Informe técnico del fallo (Diagnóstico):**\n\n{error_diagnostico}")
                 st.session_state.messages.append({"role": "assistant", "content": aviso})
 
 # ==========================================
