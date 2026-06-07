@@ -11,7 +11,7 @@ st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sideb
 
 st.markdown("""
     <style>
-    /* Compactación extrema de márgenes superiores y elements */
+    /* Compactación extrema de márgenes superiores y elementos */
     .block-container { padding-top: 0.8rem; padding-bottom: 0rem; padding-left: 0.8rem; padding-right: 0.8rem; }
     h1 { font-size: 1.6rem !important; margin-bottom: 0rem !important; margin-top: 0rem !important; }
     h2 { font-size: 1.2rem !important; margin-top: 0.4rem !important; margin-bottom: 0.1rem !important; }
@@ -116,7 +116,7 @@ with tab_hoy:
     else: st.info("Movilidad articular, estiramientos pasivos o descanso absoluto.")
 
 # ==========================================
-# PESTAÑA 2: AI COACH (SISTEMA DE SEGURIDAD EN CASCADA MULTI-MODELO)
+# PESTAÑA 2: AI COACH (PROCESAMIENTO DE CONTEXTO ESTABLE)
 # ==========================================
 with tab_chat:
     chat_input_container = st.container()
@@ -154,35 +154,33 @@ with tab_chat:
                                 paquete_multimodal.append(f"\n[CSV adjunto: {archivo.name}]\n{texto_csv}")
                             except Exception: pass
 
-                # BLINDAJE ANTI-404: Carrusel adaptativo de modelos oficiales de Google
+                # SOLUCIÓN DE PRODUCCIÓN DE PRODUCCIÓN: 
+                # Con la librería actualizada en requirements.txt, 'gemini-1.5-flash' apunta directo al canal v1 estable.
+                # Añadimos un bloque de contingencia de nombres estándar de producción.
                 modelos_a_probar = [
-                    'gemini-2.5-flash',
-                    'gemini-2.0-flash',
-                    'gemini-1.5-flash-latest',
                     'gemini-1.5-flash',
-                    'models/gemini-1.5-flash'
+                    'gemini-1.5-flash-latest',
+                    'gemini-2.0-flash'
                 ]
                 
                 respuesta_exitosa = False
                 ultimo_error_servidor = ""
                 
-                # Bucle inteligente que prueba variantes hasta que una responda correctamente
                 for nombre_modelo in modelos_a_probar:
                     try:
                         model = genai.GenerativeModel(nombre_modelo)
                         respuesta_ia = model.generate_content(paquete_multimodal)
                         st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
                         respuesta_exitosa = True
-                        break # Rompe el bucle si tiene éxito
+                        break
                     except Exception as e:
                         ultimo_error_servidor = str(e)
-                        continue # Si da error (como el 404), pasa al siguiente modelo
+                        continue
                 
-                # Si ninguno de la lista funcionó, informa amigablemente sin romper la web
                 if not respuesta_exitosa:
                     st.session_state.messages.append({
                         "role": "assistant", 
-                        "content": f"⚠️ No se ha podido conectar con los endpoints estándar de Gemini debido a restricciones de versión en el servidor. Detalle técnico: {ultimo_error_servidor}"
+                        "content": f"⚠️ Fallo de emparejamiento con los servidores de Google. Detalle técnico: {ultimo_error_servidor}. Asegúrate de que el archivo requirements.txt se haya guardado correctamente."
                     })
             else:
                 st.session_state.messages.append({"role": "assistant", "content": "Clave API ausente."})
