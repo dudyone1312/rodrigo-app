@@ -9,10 +9,9 @@ import google.generativeai as genai
 # --- 1. CONFIGURACIÓN E INTERFAZ (CSS ULTRA-COMPACTO MÓVIL) ---
 st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
 
-# CORRECCIÓN DE ERROR: Se cambia 'unsafe_style=False' por 'unsafe_allow_html=True'
 st.markdown("""
     <style>
-    /* Compactación extrema de márgenes superiores y elementos */
+    /* Compactación extrema de márgenes superiores y elements */
     .block-container { padding-top: 0.8rem; padding-bottom: 0rem; padding-left: 0.8rem; padding-right: 0.8rem; }
     h1 { font-size: 1.6rem !important; margin-bottom: 0rem !important; margin-top: 0rem !important; }
     h2 { font-size: 1.2rem !important; margin-top: 0.4rem !important; margin-bottom: 0.1rem !important; }
@@ -117,7 +116,7 @@ with tab_hoy:
     else: st.info("Movilidad articular, estiramientos pasivos o descanso absoluto.")
 
 # ==========================================
-# PESTAÑA 2: AI COACH (SOPORTE MULTIMODAL INVERSO)
+# PESTAÑA 2: AI COACH (SISTEMA DE SEGURIDAD EN CASCADA MULTI-MODELO)
 # ==========================================
 with tab_chat:
     chat_input_container = st.container()
@@ -141,34 +140,50 @@ with tab_chat:
                 st.rerun()
 
             if api_configurada:
-                try:
-                    paquete_multimodal = [f"Rol: Coach deportivo experto. Atleta: Rodrigo. Métricas fisiológicas: VFC:{hrv_actual}ms, BodyBattery:{body_battery}, Sueño:{sueno_puntuacion}. Consulta del usuario: {prompt}"]
-                    
-                    if archivos_subidos:
-                        for archivo in archivos_subidos:
-                            ext = archivo.name.split('.')[-1].lower()
-                            if ext in ['jpg', 'jpeg', 'png']:
-                                paquete_multimodal.append({"mime_type": f"image/{ext if ext != 'jpg' else 'jpeg'}", "data": archivo.getvalue()})
-                            elif ext == 'csv':
-                                try:
-                                    archivo.seek(0)
-                                    texto_csv = archivo.read().decode("utf-8")
-                                    paquete_multimodal.append(f"\n[CSV adjunto: {archivo.name}]\n{texto_csv}")
-                                except Exception: pass
+                paquete_multimodal = [f"Rol: Coach deportivo experto. Atleta: Rodrigo. Métricas fisiológicas: VFC:{hrv_actual}ms, BodyBattery:{body_battery}, Sueño:{sueno_puntuacion}. Consulta del usuario: {prompt}"]
+                
+                if archivos_subidos:
+                    for archivo in archivos_subidos:
+                        ext = archivo.name.split('.')[-1].lower()
+                        if ext in ['jpg', 'jpeg', 'png']:
+                            paquete_multimodal.append({"mime_type": f"image/{ext if ext != 'jpg' else 'jpeg'}", "data": archivo.getvalue()})
+                        elif ext == 'csv':
+                            try:
+                                archivo.seek(0)
+                                texto_csv = archivo.read().decode("utf-8")
+                                paquete_multimodal.append(f"\n[CSV adjunto: {archivo.name}]\n{texto_csv}")
+                            except Exception: pass
 
-                    # CORRECCIÓN DE ERROR 404: Descubrimiento dinámico de ruta del modelo compatible
+                # BLINDAJE ANTI-404: Carrusel adaptativo de modelos oficiales de Google
+                modelos_a_probar = [
+                    'gemini-2.5-flash',
+                    'gemini-2.0-flash',
+                    'gemini-1.5-flash-latest',
+                    'gemini-1.5-flash',
+                    'models/gemini-1.5-flash'
+                ]
+                
+                respuesta_exitosa = False
+                ultimo_error_servidor = ""
+                
+                # Bucle inteligente que prueba variantes hasta que una responda correctamente
+                for nombre_modelo in modelos_a_probar:
                     try:
-                        modelos_sistema = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
-                        modelo_final = modelos_sistema[0] if modelos_sistema else 'gemini-1.5-flash'
-                    except Exception:
-                        modelo_final = 'gemini-1.5-flash'
-                    
-                    model = genai.GenerativeModel(modelo_final)
-                    respuesta_ia = model.generate_content(paquete_multimodal)
-                    st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
-                    
-                except Exception as e:
-                    st.session_state.messages.append({"role": "assistant", "content": f"Fallo de conexión: {str(e)}"})
+                        model = genai.GenerativeModel(nombre_modelo)
+                        respuesta_ia = model.generate_content(paquete_multimodal)
+                        st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
+                        respuesta_exitosa = True
+                        break # Rompe el bucle si tiene éxito
+                    except Exception as e:
+                        ultimo_error_servidor = str(e)
+                        continue # Si da error (como el 404), pasa al siguiente modelo
+                
+                # Si ninguno de la lista funcionó, informa amigablemente sin romper la web
+                if not respuesta_exitosa:
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": f"⚠️ No se ha podido conectar con los endpoints estándar de Gemini debido a restricciones de versión en el servidor. Detalle técnico: {ultimo_error_servidor}"
+                    })
             else:
                 st.session_state.messages.append({"role": "assistant", "content": "Clave API ausente."})
             
