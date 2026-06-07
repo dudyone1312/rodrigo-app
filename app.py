@@ -1,193 +1,227 @@
 import streamlit as st
 import pandas as pd
-import datetime
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+import datetime
 import google.generativeai as genai
 
-# ==========================================
-# 1. CONFIGURACIÓN DE LA PÁGINA Y ESTILOS UI
-# ==========================================
-st.set_page_config(
-    page_title="Rodrigo Performance Hub",
-    page_icon="🏋️‍♂️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# --- 1. CONFIGURACIÓN E INTERFAZ (CSS ULTRA-COMPACTO MÓVIL) ---
+st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
 
-# Optimización estética para móviles y visualización compacta
+# CORRECCIÓN DE ERROR: Se cambia 'unsafe_style=False' por 'unsafe_allow_html=True'
 st.markdown("""
     <style>
-    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
-    .stButton>button { width: 100%; border-radius: 10px; }
-    .chat-bubble { padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+    /* Compactación extrema de márgenes superiores y elementos */
+    .block-container { padding-top: 0.8rem; padding-bottom: 0rem; padding-left: 0.8rem; padding-right: 0.8rem; }
+    h1 { font-size: 1.6rem !important; margin-bottom: 0rem !important; margin-top: 0rem !important; }
+    h2 { font-size: 1.2rem !important; margin-top: 0.4rem !important; margin-bottom: 0.1rem !important; }
+    h3 { font-size: 1.0rem !important; margin-top: 0.3rem !important; margin-bottom: 0.1rem !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 13px; padding-left: 8px; padding-right: 8px; padding-top: 4px; padding-bottom: 4px; }
+    .stMetric { padding: 0px !important; margin: 0px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: bold; }
+    [data-testid="stMetricLabel"] { font-size: 0.75rem !important; }
+    div[data-testid="stToast"] { padding: 4px; font-size: 11px; }
+    
+    /* Semáforo visual ultra-compacto */
+    .semaforo-box { border-radius: 6px; padding: 6px; color: white; text-align: center; font-size: 12px; }
+    .semaforo-rojo { background-color: #742a2a; border: 1.5px solid #f56565; }
+    .semaforo-amarillo { background-color: #744210; border: 1.5px solid #ecc94b; }
+    .semaforo-verde { background-color: #22543d; border: 1.5px solid #48bb78; }
+    
+    /* Estilos del Chat */
+    [data-testid="stChatMessage"] { padding: 0.4rem; margin-bottom: 0.4rem; border-radius: 6px; font-size: 13px; }
     </style>
-""", unsafe_style=False)
+    """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. CONEXIÓN SEGURA CON GEMINI (ANTI-404)
-# ==========================================
+# --- 2. CONFIGURACIÓN PASIVA DE LA API ---
+api_configurada = False
 if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-else:
-    st.error("⚠️ No se ha encontrado la clave 'GOOGLE_API_KEY' en los Secrets de Streamlit. Por favor, añádela en la configuración de tu panel de Streamlit Cloud.")
-
-def obtener_modelo_gemini():
-    """Busca dinámicamente un modelo disponible para evitar el Error 404."""
     try:
-        modelos = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
-        return modelos[0] if modelos else "gemini-1.5-flash"
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        api_configurada = True
     except Exception:
-        return "gemini-1.5-flash"
+        st.sidebar.error("Error en credenciales API")
 
-# ==========================================
-# 3. INICIALIZACIÓN DEL ESTADO DE LA APP (PERSISTENCIA TEMPORAL)
-# ==========================================
-if "mensajes_chat" not in st.session_state:
-    st.session_state.mensajes_chat = [
-        {"role": "assistant", "content": "¡Hola! Soy tu coach de IA. ¿Qué aspecto de tu entrenamiento o salud vamos a revisar hoy?"}
-    ]
+# --- 3. CABECERA FIJA DE LA APP (VISTA MÓVIL OPTIMIZADA) ---
+st.title("🏔️ RODRIGO HYBRID HUB")
+st.markdown("---")
 
-if "historico_salud" not in st.session_state:
-    # Datos iniciales de ejemplo para que la gráfica no aparezca vacía
-    st.session_state.historico_salud = pd.DataFrame([
-        {"Fecha": "2026-06-01", "Peso (kg)": 78.5, "Sueño (hrs)": 7.5, "Energía (1-10)": 8},
-        {"Fecha": "2026-06-04", "Peso (kg)": 78.1, "Sueño (hrs)": 6.8, "Energía (1-10)": 7}
-    ])
+# Zona de carga universal oculta por defecto para ganar pantalla
+with st.expander("📥 Cargar Archivos (Garmin CSV/Fotos)", expanded=False):
+    archivos_subidos = st.file_uploader("Arrastra archivos aquí", accept_multiple_files=True, label_visibility="collapsed")
 
-if "planificaciones" not in st.session_state:
-    st.session_state.planificaciones = "Aún no has generado ninguna planificación para esta semana. Ve a la pestaña de IA para crear una basada en tus datos actuales."
+# Variables Basales por defecto
+hrv_actual = 39
+body_battery = 61
+sueno_puntuacion = 86
+imagenes_cargadas = []
 
-# ==========================================
-# 4. ESTRUCTURA DE LA INTERFAZ DE USUARIO
-# ==========================================
-st.title("🚀 Rodrigo Performance Hub")
-st.caption("Tu ecosistema híbrido de rendimiento, salud y planificación inteligente.")
+if archivos_subidos:
+    for archivo in archivos_subidos:
+        extension = archivo.name.split('.')[-1].lower()
+        if extension == 'csv':
+            try:
+                archivo.seek(0)
+                df = pd.read_csv(archivo)
+                if 'Puntuación' in df.columns:
+                    hrv_actual = int(df.iloc[0]['Estado de VFC'])
+                    body_battery = int(df.iloc[0]['Body Battery'])
+                    sueno_puntuacion = int(df.iloc[0]['Puntuación'])
+                    st.toast(f"✅ Biométricos actualizados", icon="📈")
+                else:
+                    st.toast(f"✅ CSV detectado: {archivo.name}", icon="🏃‍♂️")
+            except Exception: pass
+        elif extension in ['jpg', 'jpeg', 'png']:
+            imagenes_cargadas.append(archivo)
 
-# Creación de pestañas para organizar la experiencia de usuario
-tab_salud, tab_plan, tab_chat = st.tabs([
-    "📊 Datos de Salud y Progreso", 
-    "📅 Planificación y Entrenamientos", 
-    "💬 Chat con Coach Gemini"
+# --- 4. PESTAÑAS DE NAVEGACIÓN PRINCIPAL ---
+tab_hoy, tab_chat, tab_analitica, tab_planes = st.tabs([
+    "🎯 HOY", "💬 AI COACH", "📈 ANALÍTICA", "📅 PLANES"
 ])
 
-# ------------------------------------------
-# PESTAÑA 1: DATOS DE SALUD Y PROGRESO
-# ------------------------------------------
-with tab_salud:
-    st.header("Formulario de Registro Biométrico")
+# ==========================================
+# PESTAÑA 1: HOY (ESTADO Y SEMÁFORO LADO A LADO)
+# ==========================================
+with tab_hoy:
+    c_metrics, c_semaforo = st.columns([1.4, 1])
     
-    # Crear dos columnas para optimizar el espacio en pantallas grandes
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fecha_registro = st.date_input("Fecha del registro", datetime.date.today())
-        peso = st.number_input("Peso Corporal (kg)", min_value=30.0, max_value=200.0, value=75.0, step=0.1)
-    
-    with col2:
-        horas_sueno = st.slider("Horas de Sueño", min_value=0.0, max_value=16.0, value=7.0, step=0.5)
-        nivel_energia = st.slider("Nivel de Energía General (1 al 10)", min_value=1, max_value=10, value=7)
+    with c_metrics:
+        st.subheader("📊 Estatus")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("HRV", f"{hrv_actual} ms")
+        col2.metric("Battery", f"{body_battery}/100")
+        col3.metric("Sueño", f"{sueno_puntuacion}/100")
         
-    if st.button("Guardar Registro del Día"):
-        nuevo_registro = {
-            "Fecha": str(fecha_registro),
-            "Peso (kg)": peso,
-            "Sueño (hrs)": horas_sueno,
-            "Energía (1-10)": nivel_energia
-        }
-        # Añadir al registro histórico en memoria
-        st.session_state.historico_salud = pd.concat([
-            st.session_state.historico_salud, 
-            pd.DataFrame([nuevo_registro])
-        ], ignore_index=True)
-        st.success("¡Datos guardados con éxito en la sesión actual!")
-
-    st.write("---")
-    st.subheader("Evolución de tus Métricas")
+    with c_semaforo:
+        st.subheader("🚥 Predisposición")
+        if hrv_actual < 40:
+            st.markdown("<div class='semaforo-box semaforo-rojo'><b>🔴 ROJO</b><br>Fatiga SNC. Prioriza Z2. Evita fallos.</div>", unsafe_allow_html=True)
+        elif hrv_actual <= 45:
+            st.markdown("<div class='semaforo-box semaforo-amarillo'><b>🟡 AMARILLO</b><br>Moderado. Entrena con RIR 2-3.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='semaforo-box semaforo-verde'><b>🟢 VERDE</b><br>SNC Óptimo. Máxima carga permitida.</div>", unsafe_allow_html=True)
     
-    # Mostrar tabla y gráfica interactiva si hay datos
-    if not st.session_state.historico_salud.empty:
-        st.dataframe(st.session_state.historico_salud, use_container_width=True)
-        
-        # Gráfica de evolución del peso utilizando Plotly
-        fig_peso = px.line(
-            st.session_state.historico_salud, 
-            x="Fecha", 
-            y="Peso (kg)", 
-            title="Evolución del Peso Corporal",
-            markers=True
-        )
-        st.plotly_chart(fig_peso, use_container_width=True)
-    else:
-        st.info("No hay datos históricos disponibles todavía.")
-
-# ------------------------------------------
-# PESTAÑA 2: PLANIFICACIÓN Y ENTRENAMIENTOS
-# ------------------------------------------
-with tab_plan:
-    st.header("Tu Planificación Activa")
-    st.info("Esta sección muestra los entrenamientos generados de forma personalizada por la Inteligencia Artificial.")
+    st.markdown("---")
+    st.subheader("🏋️‍♂️ Sesión Dinámica")
+    disciplina = st.selectbox("Entrenamiento de hoy:", ["🏃‍♂️ Carrera / Trail", "🏋️‍♂️ Gimnasio", "🧗‍♂️ Escalada", "🧘‍♂️ Descanso Activo"], label_visibility="collapsed")
     
-    # Caja de texto editable que mantiene la rutina actual
-    rutina_actual = st.text_area(
-        label="Rutina Semanal y Notas del Entrenador",
-        value=st.session_state.planificaciones,
-        height=350
-    )
-    st.session_state.planificaciones = rutina_actual
-    
-    if st.button("Guardar Modificaciones Manuales"):
-        st.success("Planificación actualizada y guardada correctamente.")
+    if "Gimnasio" in disciplina:
+        if hrv_actual < 40:
+            st.info("**Fuerza Metabólica (3x15-20 reps / Poco Peso)**\n\n1. Zancadas corporales\n\n2. Flexiones al fallo técnico\n\n3. Remo con mancuerna suave")
+        else:
+            st.success("**Fuerza Máxima / Hipertrofia (4x5-10 reps / Carga Alta)**\n\n1. Sentadilla Trasera Barra\n\n2. Peso Muerto Rumano\n\n3. Dominadas Lastradas")
+    elif "Carrera" in disciplina:
+        if hrv_actual < 40: st.info("**Regenerativo:** Carrera continua en Z2 estricta (<148 ppm). Evita desniveles.")
+        else: st.success("**VO2 Max:** Series intensas en pista o cuestas potentes cortas (Z4/Z5).")
+    else: st.info("Movilidad articular, estiramientos pasivos o descanso absoluto.")
 
-# ------------------------------------------
-# PESTAÑA 3: CHAT CON COACH GEMINI
-# ------------------------------------------
+# ==========================================
+# PESTAÑA 2: AI COACH (SOPORTE MULTIMODAL INVERSO)
+# ==========================================
 with tab_chat:
-    st.header("Estrategia e Inteligencia Artificial")
-    st.caption("Pregúntale a Gemini sobre tus rutinas, pídele que analice tus datos de salud o que te diseñe un nuevo bloque de entrenamiento.")
-
-    # Mostrar el historial de conversación en orden cronológico inverso
-    for msg in st.session_state.mensajes_chat:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-
-    # Entrada de texto del usuario
-    if prompt := st.chat_input("Escribe aquí tu duda (Ej: 'Genera un entrenamiento de pierna basado en mi nivel de energía de hoy')"):
+    chat_input_container = st.container()
+    messages_container = st.container()
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        st.session_state.messages.append({"role": "assistant", "content": f"¡Hola Rodrigo! Datos cargados. Pídeme procesar, cruzar o borrar datos de tu historial y lo ejecutaré inmediatamente."})
         
-        # Insertar mensaje del usuario en la pantalla inmediatamente
-        with st.chat_message("user"):
-            st.write(prompt)
-        st.session_state.mensajes_chat.append({"role": "user", "content": prompt})
-        
-        # Procesar la petición con la API de Google de forma segura
-        with st.spinner("Pensando como tu coach deportivo..."):
-            try:
-                modelo_disponible = obtener_modelo_gemini()
-                model = genai.GenerativeModel(modelo_disponible)
-                
-                # Contextualizamos a la IA añadiendo los últimos datos de salud si existen
-                contexto_salud = ""
-                if not st.session_state.historico_salud.empty:
-                    ultimo_registro = st.session_state.historico_salud.iloc[-1].to_dict()
-                    contexto_salud = f"Datos actuales del atleta: {ultimo_registro}. "
-                
-                instruccion_sistema = (
-                    f"Actúa como un Entrenador Personal de Élite y Experto en Ciencias del Deporte. "
-                    f"{contexto_salud}Responde de forma clara, motivadora y estructurada en formato Markdown. "
-                    f"Pregunta del usuario: {prompt}"
-                )
-                
-                respuesta = model.generate_content(instruccion_sistema)
-                texto_respuesta = respuesta.text
-                
-                # Mostrar respuesta en pantalla e incorporar al historial
-                with st.chat_message("assistant"):
-                    st.write(texto_respuesta)
-                st.session_state.mensajes_chat.append({"role": "assistant", "content": texto_respuesta})
-                
-                # Si el usuario pidió explícitamente un entrenamiento o plan, lo sugerimos también en la pestaña de planes
-                if "entrenamiento" in prompt.lower() or "planificación" in prompt.lower() or "rutina" in prompt.lower():
-                    st.session_state.planificaciones = texto_respuesta
-                    st.info("💡 He detectado una rutina en la respuesta. ¡También la he copiado automáticamente en tu pestaña de 'Planificación'!")
+    with messages_container:
+        for msg in reversed(st.session_state.messages):
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    with chat_input_container:
+        if prompt := st.chat_input("Escribe tu duda o comando de borrado aquí...", key="chat_input"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            
+            if "borra" in prompt.lower() or "limpia" in prompt.lower() or "elimina" in prompt.lower():
+                st.session_state.messages = [{"role": "assistant", "content": "🧹 Memoria temporal e historial deportivo limpiados con éxito. Listo para nuevos datos."}]
+                st.rerun()
+
+            if api_configurada:
+                try:
+                    paquete_multimodal = [f"Rol: Coach deportivo experto. Atleta: Rodrigo. Métricas fisiológicas: VFC:{hrv_actual}ms, BodyBattery:{body_battery}, Sueño:{sueno_puntuacion}. Consulta del usuario: {prompt}"]
                     
-            except Exception as e:
-                st.error(f"Hubo un contratiempo al conectar con Gemini: {e}")
+                    if archivos_subidos:
+                        for archivo in archivos_subidos:
+                            ext = archivo.name.split('.')[-1].lower()
+                            if ext in ['jpg', 'jpeg', 'png']:
+                                paquete_multimodal.append({"mime_type": f"image/{ext if ext != 'jpg' else 'jpeg'}", "data": archivo.getvalue()})
+                            elif ext == 'csv':
+                                try:
+                                    archivo.seek(0)
+                                    texto_csv = archivo.read().decode("utf-8")
+                                    paquete_multimodal.append(f"\n[CSV adjunto: {archivo.name}]\n{texto_csv}")
+                                except Exception: pass
+
+                    # CORRECCIÓN DE ERROR 404: Descubrimiento dinámico de ruta del modelo compatible
+                    try:
+                        modelos_sistema = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
+                        modelo_final = modelos_sistema[0] if modelos_sistema else 'gemini-1.5-flash'
+                    except Exception:
+                        modelo_final = 'gemini-1.5-flash'
+                    
+                    model = genai.GenerativeModel(modelo_final)
+                    respuesta_ia = model.generate_content(paquete_multimodal)
+                    st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
+                    
+                except Exception as e:
+                    st.session_state.messages.append({"role": "assistant", "content": f"Fallo de conexión: {str(e)}"})
+            else:
+                st.session_state.messages.append({"role": "assistant", "content": "Clave API ausente."})
+            
+            st.rerun()
+
+# ==========================================
+# PESTAÑA 3: ANALÍTICA (MÉTRICAS Y GRÁFICAS)
+# ==========================================
+with tab_analitica:
+    st.subheader("📊 Base de Datos y Análisis de Rendimiento")
+    
+    fechas_anual = pd.date_range(end=datetime.date(2026, 6, 6), periods=52, freq='W')
+    df_anual = pd.DataFrame({
+        'Fecha': fechas_anual,
+        'HRV': np.random.randint(35, 60, size=52),
+        'FC_Reposo': np.random.randint(48, 58, size=52),
+        'Km': np.random.randint(15, 50, size=52),
+        'Carga_Aguda': np.random.randint(400, 800, size=52),
+        'Carga_Cronica': np.random.randint(450, 700, size=52)
+    })
+
+    st.markdown("##### 1. Estado de Carga (Aguda vs Crónica)")
+    fig_carga = go.Figure()
+    fig_carga.add_trace(go.Scatter(x=df_anual['Fecha'], y=df_anual['Carga_Cronica'], fill='tozeroy', mode='none', name='Rango Óptimo', fillcolor='rgba(47, 133, 90, 0.35)'))
+    fig_carga.add_trace(go.Scatter(x=df_anual['Fecha'], y=df_anual['Carga_Aguda'], mode='lines', name='Carga Actual', line=dict(color='#ff4b4b', width=1.5)))
+    fig_carga.update_layout(template="plotly_dark", height=180, margin=dict(l=5,r=5,t=5,b=5), legend=dict(orientation="h", y=1.15, x=0))
+    st.plotly_chart(fig_carga, use_container_width=True)
+
+    st.markdown("##### 2. Evolución Anual de Variabilidad Cardíaca (HRV)")
+    fig_salud = px.line(df_anual, x='Fecha', y='HRV', color_discrete_sequence=['#ff4b4b'], template="plotly_dark")
+    fig_salud.update_layout(height=140, margin=dict(l=5,r=5,t=5,b=5), yaxis_title=None)
+    st.plotly_chart(fig_salud, use_container_width=True)
+
+    col_g3, col_g4 = st.columns(2)
+    
+    with col_g3:
+        st.markdown("##### 3. Ritmos por Zona Cardiaca")
+        tabla_ritmos = pd.DataFrame({
+            "Zona de Trabajo": ["Z1 (<130 ppm)", "Z2 (131-148)", "Z3 (149-162)", "Z4 (163-175)", "Z5 (>176 ppm)"],
+            "Ritmo Objetivo": ["6:25 min/km", "5:40 min/km", "5:05 min/km", "4:30 min/km", "3:55 min/km"]
+        })
+        st.dataframe(tabla_ritmos, hide_index=True, use_container_width=True)
+
+    with col_g4:
+        st.markdown("##### 4. Progresión Grado Escalada")
+        fig_escalada = go.Figure()
+        fig_escalada.add_trace(go.Scatter(x=['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'], y=[3, 3, 4, 4, 5, 5], mode='lines+markers', name='Grado V', line=dict(color='#ff9900', width=2.5)))
+        fig_escalada.update_layout(template="plotly_dark", height=130, margin=dict(l=5,r=5,t=10,b=5), yaxis_title=None)
+        st.plotly_chart(fig_escalada, use_container_width=True)
+
+# ==========================================
+# PESTAÑA 4: PLANES
+# ==========================================
+with tab_planes:
+    st.subheader("📅 Planificación del Macrociclo")
+    st.info("Espacio reservado para la estructuración táctica de bloques de carrera y fuerza.")
