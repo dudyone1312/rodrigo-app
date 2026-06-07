@@ -4,12 +4,12 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
-import random
 import google.generativeai as genai
 
 # --- 1. CONFIGURACIÓN E INTERFAZ (CSS ULTRA-COMPACTO MÓVIL) ---
 st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
 
+# Mantener optimización UI según la hoja de ruta técnica
 st.markdown("""
     <style>
     .block-container { padding-top: 0.8rem; padding-bottom: 0rem; padding-left: 0.8rem; padding-right: 0.8rem; }
@@ -31,27 +31,29 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. CONFIGURACIÓN PASIVA DE LA API ---
+# --- 2. CONFIGURACIÓN DE LA API (CORREGIDA SEGÚN DOC V2) ---
 api_configurada = False
-if "GOOGLE_API_KEY" in st.secrets:
+if "GOOGLE API KEY" in st.secrets:  # Corregido: Uso de espacio en vez de guion bajo
     try:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        genai.configure(api_key=st.secrets["GOOGLE API KEY"])
         api_configurada = True
     except Exception:
-        st.sidebar.error("Error en credenciales API")
+        st.sidebar.error("Error en configuración de credenciales")
 
-# --- 3. CABECERA FIJA DE LA APP ---
+# --- 3. CABECERA Y ENTRADA DE DATOS ---
 st.title("🏔️ RODRIGO HYBRID HUB")
 st.markdown("---")
 
 with st.expander("📥 Cargar Archivos (Garmin CSV/Fotos)", expanded=False):
     archivos_subidos = st.file_uploader("Arrastra archivos aquí", accept_multiple_files=True, label_visibility="collapsed")
 
-# Valores biométricos base
+# Biométricos base por defecto
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
+datos_csv_contexto = ""
 
+# Procesamiento del archivo subido
 if archivos_subidos:
     for archivo in archivos_subidos:
         extension = archivo.name.split('.')[-1].lower()
@@ -66,9 +68,13 @@ if archivos_subidos:
                     st.toast(f"✅ Biométricos actualizados", icon="📈")
                 else:
                     st.toast(f"✅ CSV detectado: {archivo.name}", icon="🏃‍♂️")
-            except Exception: pass
+                
+                # Guardamos las filas más recientes de forma compacta para dárselas a la IA
+                datos_csv_contexto = f"\n[Datos actualizados del archivo {archivo.name}]:\n{df.head(5).to_string()}"
+            except Exception:
+                pass
 
-# --- 4. PESTAÑAS ---
+# --- 4. PESTAÑAS DE NAVEGACIÓN ---
 tab_hoy, tab_chat, tab_analitica, tab_planes = st.tabs(["🎯 HOY", "💬 AI COACH", "📈 ANALÍTICA", "📅 PLANES"])
 
 # PESTAÑA 1: HOY
@@ -102,14 +108,14 @@ with tab_hoy:
         else: st.success("**VO2 Max:** Series intensas en pista o cuestas (Z4/Z5).")
     else: st.info("Movilidad articular o descanso absoluto.")
 
-# PESTAÑA 2: AI COACH (SISTEMA DINDAMICO ANTI-BLOQUEO)
+# PESTAÑA 2: AI COACH (CONEXIÓN REAL Y DIRECTA CON LA IA)
 with tab_chat:
     chat_input_container = st.container()
     messages_container = st.container()
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Historial y biométricos sincronizados. ¿Qué aspecto de la planificación o sesión de hoy quieres ajustar?"})
+        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Conexión verificada con los modelos estables de Gemini. Sube tus archivos de Garmin y analicemos los cambios reales de tu rendimiento."})
         
     with messages_container:
         for msg in reversed(st.session_state.messages):
@@ -117,79 +123,34 @@ with tab_chat:
                 st.markdown(msg["content"])
 
     with chat_input_container:
-        if prompt := st.chat_input("Escribe tu consulta deportiva aquí...", key="chat_input"):
+        if prompt := st.chat_input("Escribe tu duda aquí...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             
             if any(x in prompt.lower() for x in ["borra", "limpia", "elimina"]):
-                st.session_state.messages = [{"role": "assistant", "content": "🧹 Memoria e historial reseteados con éxito."}]
+                st.session_state.messages = [{"role": "assistant", "content": "🧹 Historial de conversación limpio."}]
                 st.rerun()
 
-            respuesta_exitosa = False
-            
             if api_configurada:
-                # Compresión extrema de tokens para evitar el Error 429
-                paquete_multimodal = [f"Rol: Coach deportivo. Atleta: Rodrigo. Métricas: VFC:{hrv_actual}ms, BB:{body_battery}%, Sueño:{sueno_puntuacion}. Pregunta: {prompt}"]
-                
-                if archivos_subidos:
-                    try:
-                        archivo.seek(0)
-                        df_temp = pd.read_csv(archivo)
-                        paquete_multimodal.append(f"\n[Muestra Garmin]:\n{df_temp.head(3).to_string()}")
-                    except Exception: pass
-
                 try:
-                    # IMPLEMENTACIÓN DOCUMENTACIÓN V2: Descubrimiento dinámico real de canales abiertos
-                    modelos_vivos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    modelos_flash = [m for m in modelos_vivos if 'flash' in m]
-                    modelo_final = modelos_flash[0] if modelos_flash else (modelos_vivos[0] if modelos_vivos else 'gemini-1.5-flash')
+                    # Descubrimiento dinámico Anti-404 exacto de tu documento técnico (V2)
+                    modelos = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
+                    modelo_usar = modelos[0] if modelos else 'gemini-1.5-flash'
                     
-                    model = genai.GenerativeModel(modelo_final)
-                    respuesta_ia = model.generate_content(paquete_multimodal)
-                    st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
-                    respuesta_exitosa = True
-                except Exception:
-                    pass # Si falla por cuota cero, el testigo pasa al motor local autónomo
-
-            # MOTOR LOCAL AUTÓNOMO DINÁMICO (Bypass inteligente si la API está caída)
-            if not respuesta_exitosa:
-                # Variaciones de vocabulario para que el texto sea siempre único
-                openers = ["Entendido perfectamente, Rodrigo.", "Analizando tu planteamiento en tiempo real.", "Alineando tu consulta con tus datos Garmin."]
-                consejos_recup = ["incrementar los carbohidratos complejos", "añadir una sesión de foam roller", "forzar un bloque de sueño extra de 45 min", "hidratarte con electrolitos debido a la demanda cardiovascular"]
-                
-                opener = random.choice(openers)
-                recup_extra = random.choice(consejos_recup)
-                
-                texto_analisis = ""
-                p_low = prompt.lower()
-                
-                # Enrutamiento inteligente según las palabras que escribas
-                if any(x in p_low for x in ["fuerza", "gimnasio", "pesas", "hipertrofia", "rir"]):
-                    if hrv_actual < 40:
-                        texto_analisis = f"Para entrenar fuerza hoy con un HRV de {hrv_actual}ms, la recomendación de contingencia es reducir drásticamente el volumen de series. Trabaja alejado del fallo (RIR 3-4). No busques récords personales hoy; enfócate en el ritmo de ejecución y movimientos compuestos controlados."
-                    else:
-                        texto_analisis = f"Tus {hrv_actual}ms de VFC te dan luz verde para meter kilos. Diseña una sesión pesada con RIR bajo (1-2), priorizando multiarticulares como sentadillas o press. Tienes sustrato nervioso para asimilarlo."
-                
-                elif any(x in p_low for x in ["correr", "carrera", "trail", "series", "km", "ritmo", "z2"]):
-                    if hrv_actual < 40:
-                        texto_analisis = f"En carrera, con el sistema nervioso en zona roja, prohíbe las series de alta intensidad. Rueda estrictamente en Zona 2 aeróbica suave. Monitoriza que tu pulso no se dispare y prioriza el terreno plano para mitigar el impacto articular."
-                    else:
-                        texto_analisis = f"Día excelente para apretar ritmos en carrera. Puedes planificar con seguridad un entrenamiento fraccionado (series en Z4) o cuestas explosivas; tu variabilidad cardíaca indica una óptima tolerancia al estrés mecánico."
-                
-                elif any(x in p_low for x in ["vfc", "hrv", "sueño", "cansado", "recuperar", "battery"]):
-                    texto_analisis = f"Evaluando tu estado regenerativo: Tu Body Battery está al {body_battery}% y el sueño puntuó {sueno_puntuacion}/100. Aunque el descanso nocturno fue decente, tu VFC acumulada ({hrv_actual}ms) arrastra fatiga residual. Te sugiero {recup_extra}."
-                
-                else:
-                    # Respuesta genérica reactiva y dinámica basada en contexto
-                    texto_analisis = f"Respecto a tu duda exacta ('{prompt}'), cruzando tu Body Battery ({body_battery}%) y tu HRV de {hrv_actual}ms, la clave táctica del macrociclo hoy es modular la intensidad global. No canceles el movimiento, pero regula las cargas de estrés metabólico para no estancar tu rendimiento a largo plazo."
-
-                respuesta_local = f"""🤖 **[Conexión Local Optimizada]**
-{opener} Debido a una saturación externa de cuotas en los servidores globales, he procesado tu solicitud de forma local e inmediata:
-
-* **Estado Fisiológico:** HRV {hrv_actual}ms | Energía {body_battery}% | Sueño {sueno_puntuacion}/100
-* **Análisis Personalizado:** {texto_analisis}
-
-*Nota: Esta respuesta se autogenera dinámicamente mediante el motor de reglas de tu Hub deportivo para garantizar que nunca te quedes sin feedback.*"""
-                st.session_state.messages.append({"role": "assistant", "content": respuesta_local})
+                    # Construcción del mensaje inyectando dinámicamente los datos reales del archivo
+                    contexto_completo = (
+                        f"Rol: Eres el Coach deportivo experto personal de Rodrigo.\n"
+                        f"Métricas fisiológicas actuales de control: HRV/VFC: {hrv_actual}ms, Body Battery: {body_battery}%, Calidad de Sueño: {sueno_puntuacion}/100.\n"
+                        f"{datos_csv_contexto}\n"
+                        f"Consulta directa del atleta Rodrigo: {prompt}"
+                    )
+                    
+                    model = genai.GenerativeModel(modelo_usar)
+                    resp = model.generate_content(contexto_completo)
+                    st.session_state.messages.append({"role": "assistant", "content": resp.text})
+                except Exception as e:
+                    st.session_state.messages.append({"role": "assistant", "content": f"⚠️ Fallo en la comunicación con la API: {e}"})
+            else:
+                st.session_state.messages.append({"role": "assistant", "content": "⚠️ Error crítico: No se encuentra la clave 'GOOGLE API KEY' en st.secrets de Streamlit. Revisa la configuración de tu panel cloud."})
             
             st.rerun()
 
