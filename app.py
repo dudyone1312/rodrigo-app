@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datetime
 import google.generativeai as genai
+from PIL import Image  # Permite procesar capturas y fotos de forma real
 
 # --- 1. CONFIGURACIÓN E INTERFAZ (CSS ULTRA-COMPACTO MÓVIL) ---
 st.set_page_config(page_title="Rodrigo Hybrid Hub", layout="wide", initial_sidebar_state="collapsed")
@@ -30,11 +31,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. CONFIGURACIÓN DE LA API (DOBLE COMPROBACIÓN ANTIFALLOS) ---
+# --- 2. CONFIGURACIÓN DE LA API (DOBLE COMPROBACIÓN ADAPTATIVA) ---
 api_configurada = False
 clave_encontrada = None
 
-# Buscamos la clave con guion bajo o con espacio para resolver la discrepancia de la Doc V2
 if "GOOGLE_API_KEY" in st.secrets:
     clave_encontrada = st.secrets["GOOGLE_API_KEY"]
 elif "GOOGLE API KEY" in st.secrets:
@@ -47,7 +47,7 @@ if clave_encontrada:
     except Exception as e:
         st.sidebar.error(f"Error en credenciales: {e}")
 
-# --- 3. CABECERA Y ENTRADA DE DATOS ---
+# --- 3. CABECERA Y ENTRADA DE DATOS MULTI-FORMATO ---
 st.title("🏔️ RODRIGO HYBRID HUB")
 st.markdown("---")
 
@@ -58,12 +58,15 @@ with st.expander("📥 Cargar Archivos (Garmin CSV/Fotos)", expanded=False):
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
-datos_archivos_contexto = ""
+datos_csv_contexto = ""
+lista_imagenes_pil = []
 
-# Procesamiento dinámico de archivos (CSV o Imágenes)
+# Procesamiento adaptativo según el tipo de archivo subido
 if archivos_subidos:
     for archivo in archivos_subidos:
         extension = archivo.name.split('.')[-1].lower()
+        
+        # Si es un archivo de datos (CSV)
         if extension == 'csv':
             try:
                 archivo.seek(0)
@@ -76,12 +79,19 @@ if archivos_subidos:
                 else:
                     st.toast(f"✅ CSV detectado: {archivo.name}", icon="🏃‍♂️")
                 
-                datos_archivos_contexto += f"\n[Datos CSV del archivo {archivo.name}]:\n{df.head(5).to_string()}\n"
+                datos_csv_contexto += f"\n[Datos extraídos del CSV {archivo.name}]:\n{df.head(10).to_string()}\n"
             except Exception:
                 pass
+                
+        # Si es una imagen (Captura de pantalla, PNG, JPG, etc.)
         elif extension in ['png', 'jpg', 'jpeg', 'webp']:
-            st.toast(f"📸 Imagen cargada: {archivo.name}", icon="🖼️")
-            datos_archivos_contexto += f"\n[Archivo adjunto]: Rodrigo ha subido una imagen/captura de pantalla llamada '{archivo.name}'.\n"
+            try:
+                archivo.seek(0)
+                img_abierta = Image.open(archivo)
+                lista_imagenes_pil.append(img_abierta)
+                st.toast(f"📸 Imagen vinculada al Coach: {archivo.name}", icon="🖼️")
+            except Exception:
+                pass
 
 # --- 4. PESTAÑAS DE NAVEGACIÓN ---
 tab_hoy, tab_chat, tab_analitica, tab_planes = st.tabs(["🎯 HOY", "💬 AI COACH", "📈 ANALÍTICA", "📅 PLANES"])
@@ -117,14 +127,14 @@ with tab_hoy:
         else: st.success("**VO2 Max:** Series intensas en pista o cuestas (Z4/Z5).")
     else: st.info("Movilidad articular o descanso absoluto.")
 
-# PESTAÑA 2: AI COACH (CONEXIÓN REAL E INTELIGENTE CON GEMINI)
+# PESTAÑA 2: AI COACH (ENTORNO MULTIMODAL DIRECTO DE ALTA DISPONIBILIDAD)
 with tab_chat:
     chat_input_container = st.container()
     messages_container = st.container()
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Conexión reestablecida con éxito. Sube cualquier archivo (CSV de Garmin o imágenes de tus métricas) y planifiquemos tu entrenamiento basándonos en datos reales."})
+        st.session_state.messages.append({"role": "assistant", "content": "¡Hola Rodrigo! Conexión adaptativa activada. Puedes escribirme, subir tus planificaciones en CSV o arrastrar directamente capturas de pantalla de tus métricas de Garmin para que las analicemos juntos."})
         
     with messages_container:
         for msg in reversed(st.session_state.messages):
@@ -132,38 +142,51 @@ with tab_chat:
                 st.markdown(msg["content"])
 
     with chat_input_container:
-        if prompt := st.chat_input("Pídeme un entrenamiento o consulta tus métricas...", key="chat_input"):
+        if prompt := st.chat_input("Solicita tu entreno o analiza tus archivos aquí...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             
             if any(x in prompt.lower() for x in ["borra", "limpia", "elimina"]):
-                st.session_state.messages = [{"role": "assistant", "content": "🧹 Historial de chat reiniciado."}]
+                st.session_state.messages = [{"role": "assistant", "content": "🧹 Historial de chat y memoria reseteados."}]
                 st.rerun()
 
             if api_configurada:
                 try:
-                    # Descubrimiento dinámico Anti-404 exacto de tu documento técnico (V2)
-                    modelos = [m.name for m in genai.list_models() if "gemini-1.5-flash" in m.name]
-                    modelo_usar = modelos[0] if modelos else 'gemini-1.5-flash'
+                    # DESCUBRIMIENTO EVOLUTIVO: Busca modelos activos válidos omitiendo versiones obsoletas
+                    modelos_validos = []
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            modelos_validos.append(m.name)
                     
-                    # Estructuración completa del mensaje para la Inteligencia Artificial
-                    contexto_completo = (
-                        f"Rol: Eres el Coach deportivo experto personal de Rodrigo.\n"
-                        f"Métricas fisiológicas del atleta hoy: HRV/VFC: {hrv_actual}ms, Body Battery: {body_battery}%, Calidad de Sueño: {sueno_puntuacion}/100.\n"
-                        f"{datos_archivos_contexto}\n"
-                        f"Pregunta o instrucción de Rodrigo: {prompt}"
+                    # Selecciona prioritariamente el canal Flash que esté operativo en 2026
+                    modelos_flash = [m for m in modelos_validos if "flash" in m.lower()]
+                    modelo_final = modelos_flash[0] if modelos_flash else (modelos_validos[0] if modelos_validos else 'gemini-2.0-flash')
+                    
+                    # Construcción del contexto textual estructurado
+                    contexto_instruccion = (
+                        f"Rol: Eres el Coach deportivo experto y entrenador personal de Rodrigo.\n"
+                        f"Métricas del día: HRV/VFC: {hrv_actual}ms, Body Battery: {body_battery}%, Sueño: {sueno_puntuacion}/100.\n"
+                        f"{datos_csv_contexto}\n"
+                        f"Instrucción actual de Rodrigo: {prompt}\n"
+                        f"Nota: Si hay imágenes adjuntas en el paquete, analízalas detalladamente ya que contienen sus datos de rendimiento."
                     )
                     
-                    model = genai.GenerativeModel(modelo_usar)
-                    resp = model.generate_content(contexto_completo)
+                    # Empaquetado multimodal (Texto del prompt + Objetos de imagen reales de Pillow)
+                    paquete_peticion = [contexto_instruccion]
+                    for img in lista_imagenes_pil:
+                        paquete_peticion.append(img)
+                    
+                    # Generación de la respuesta inteligente
+                    model = genai.GenerativeModel(modelo_final)
+                    resp = model.generate_content(paquete_peticion)
                     st.session_state.messages.append({"role": "assistant", "content": resp.text})
+                    
                 except Exception as e:
-                    # Manejo inteligente si de verdad se agotan los tokens gratuitos de Google
                     if "429" in str(e) or "quota" in str(e).lower():
-                        st.session_state.messages.append({"role": "assistant", "content": "🛑 **Límite de cuota diaria de Google alcanzado (Error 429)**.\n\nRodrigo, la conexión y el código están perfectos, pero las peticiones gratuitas diarias se han agotado por hoy debido al volumen de desarrollo. Las cuotas se restablecen automáticamente por completo en unas horas."})
+                        st.session_state.messages.append({"role": "assistant", "content": "🛑 **Aviso de Cuota:** Hemos alcanzado las peticiones gratuitas máximas por hora que concede Google. El código y el canal están perfectos, la cuota se reiniciará automáticamente en un momento."})
                     else:
-                        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ Error de comunicación con Gemini: {e}"})
+                        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ Error en el procesamiento del modelo: {e}"})
             else:
-                st.session_state.messages.append({"role": "assistant", "content": "❌ **Error de configuración cloud:** No se encuentra tu API Key en los Secrets de Streamlit. Recuerda configurar en la pestaña 'Advanced Settings' de tu panel cloud la variable `GOOGLE_API_KEY = 'tu_clave_real_aqui'`."})
+                st.session_state.messages.append({"role": "assistant", "content": "❌ **Falta API Key:** Por favor, asegúrate de añadir la variable `GOOGLE_API_KEY` en la sección Advanced Settings -> Secrets de tu panel de Streamlit Cloud."})
             
             st.rerun()
 
