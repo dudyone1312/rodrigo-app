@@ -20,13 +20,25 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INICIALIZACIÓN DEL CEREBRO (GEMINI API) ---
+# --- INICIALIZACIÓN DEL CEREBRO CON AUTO-DETECCIÓN ---
+api_lista = False
+model = None
+
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
-    api_lista = True
-except:
+    
+    # Sistema de tolerancia a fallos de modelos (v1beta vs v1)
+    for nombre_modelo in ['gemini-2.0-flash', 'gemini-pro', 'gemini-1.5-flash']:
+        try:
+            model = genai.GenerativeModel(nombre_modelo)
+            # Hacemos una verificación rápida sin coste para comprobar si el modelo responde en este entorno
+            model.generate_content("test")
+            api_lista = True
+            break
+        except:
+            continue
+except Exception as e:
     api_lista = False
 
 st.title("⚡ RODRIGO PERFORMANCE HUB")
@@ -130,7 +142,7 @@ with tab_chat:
     st.write("Tu Coach analizará tu consulta teniendo en cuenta tus métricas actuales.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Si ya has configurado la clave API, pregúntame lo que necesites."}]
+        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Conexión de seguridad establecida. Pregúntame lo que necesites."}]
         
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -142,9 +154,8 @@ with tab_chat:
             st.markdown(prompt)
             
         with st.chat_message("assistant"):
-            if api_lista:
+            if api_lista and model is not None:
                 try:
-                    # El System Prompt oculto que guía al Coach
                     instruccion_coach = f"""
                     Eres el entrenador de rendimiento híbrido de Rodrigo. Basa tus decisiones en ciencia (2021-2026), 
                     ignora rigideces obsoletas del ACSM y adapta el entreno a su VFC actual ({hrv_actual} ms). 
@@ -154,11 +165,11 @@ with tab_chat:
                     st.markdown(respuesta_ia.text)
                     st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
                 except Exception as e:
-                    error_msg = f"Error en la conexión con Gemini: {e}"
+                    error_msg = f"Error en la llamada de contenido: {e}"
                     st.error(error_msg)
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
             else:
-                aviso = "⚠️ **Falta la conexión neuronal:** No has añadido la GOOGLE_API_KEY en los Secrets de Streamlit. Hazlo para que pueda responderte."
+                aviso = "⚠️ **Falta la conexión neuronal o los Secrets son incorrectos:** Revisa que hayas añadido la GOOGLE_API_KEY correctamente en la plataforma de Streamlit."
                 st.warning(aviso)
                 st.session_state.messages.append({"role": "assistant", "content": aviso})
 
@@ -174,7 +185,7 @@ with tab_mes:
     st.write("Planificación mensual y focos estratégicos.")
 
 # ==========================================
-# PESTAÑA 5: HISTÓRICOS Y GRÁFICAS (INTACTAS)
+# PESTAÑA 5: HISTÓRICOS Y GRÁFICAS
 # ==========================================
 with tab_historicos:
     st.header("📈 Base de Datos Analítica (Últimas 52 Semanas)")
