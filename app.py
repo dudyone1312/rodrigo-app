@@ -20,32 +20,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INICIALIZACIÓN DEL CEREBRO CON DIAGNÓSTICO EN PANTALLA ---
+# --- INICIALIZACIÓN NEURONAL (OPTIMIZADA PARA FREE TIER) ---
+# Solo configuramos la llave de forma pasiva para no gastar cuota de peticiones al arrancar.
 api_lista = False
 model = None
-error_diagnostico = ""
 
-try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        genai.configure(api_key=api_key)
-        
-        # Probamos los modelos actuales en orden de eficiencia
-        for nombre_modelo in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']:
-            try:
-                test_model = genai.GenerativeModel(nombre_modelo)
-                # Intento de petición de control
-                test_model.generate_content("test")
-                model = test_model
-                api_lista = True
-                break
-            except Exception as e_modelo:
-                error_diagnostico += f"• {nombre_modelo}: {str(e_modelo)}\n"
-                continue
-    else:
-        error_diagnostico = "La clave 'GOOGLE_API_KEY' no se encuentra configurada en los Secrets de Streamlit."
-except Exception as e_general:
-    error_diagnostico = f"Error general en el módulo de configuración: {str(e_general)}"
+if "GOOGLE_API_KEY" in st.secrets:
+    try:
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        # Usamos el modelo 1.5 Flash estable que está habilitado en Europa gratis
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        api_lista = True
+    except Exception as e:
+        st.sidebar.error(f"Error de configuración API: {e}")
 
 st.title("⚡ RODRIGO PERFORMANCE HUB")
 st.markdown("---")
@@ -53,13 +40,13 @@ st.markdown("---")
 # --- ZONA DE CARGA UNIVERSAL (MULTIFORMATO) ---
 archivos_subidos = st.file_uploader("📥 Arrastra aquí tus archivos (CSV, Capturas JPG/PNG, PDFs...)", accept_multiple_files=True)
 
-# Variables Basales por defecto
+# Variables Basales por defecto (simulación inicial)
 hrv_actual = 39
 body_battery = 61
 sueno_puntuacion = 86
 imagenes_cargadas = []
 
-# Procesador de Inteligencia de Archivos
+# Procesador de Archivos
 if archivos_subidos:
     for archivo in archivos_subidos:
         extension = archivo.name.split('.')[-1].lower()
@@ -70,20 +57,19 @@ if archivos_subidos:
                     hrv_actual = int(df.iloc[0]['Estado de VFC'])
                     body_battery = int(df.iloc[0]['Body Battery'])
                     sueno_puntuacion = int(df.iloc[0]['Puntuación'])
-                    st.toast(f"✅ CSV Biométrico procesado: {archivo.name}")
+                    st.toast(f"✅ CSV Biométrico cargado: Métricas actualizadas", icon="📈")
                 else:
-                    st.toast(f"✅ CSV de Actividades detectado: {archivo.name}")
+                    st.toast(f"✅ CSV de Actividades detectado: {archivo.name}", icon="🏃‍♂️")
             except:
-                st.toast(f"Error procesando CSV: {archivo.name}", icon="⚠️")
+                st.toast(f"Error leyendo el CSV: {archivo.name}", icon="⚠️")
         elif extension in ['jpg', 'jpeg', 'png', 'heic']:
             imagenes_cargadas.append(archivo)
-        elif extension == 'pdf':
-            st.toast(f"📄 Documento PDF recibido: {archivo.name}")
+            st.toast(f"✅ Imagen guardada en memoria", icon="📸")
         else:
-            st.toast(f"📁 Archivo general guardado: {archivo.name}")
+            st.toast(f"📁 Archivo recibido: {archivo.name}")
 
 if imagenes_cargadas:
-    with st.expander("📸 Archivos Multimedia Adjuntos (Haz clic para ver)", expanded=True):
+    with st.expander("📸 Ver Archivos Multimedia Adjuntos", expanded=False):
         columnas_img = st.columns(len(imagenes_cargadas))
         for idx, img in enumerate(imagenes_cargadas):
             with columnas_img[idx]:
@@ -91,7 +77,7 @@ if imagenes_cargadas:
 
 st.markdown("---")
 
-# --- PESTAÑAS ---
+# --- PESTAÑAS DE NAVEGACIÓN ---
 tab_hoy, tab_chat, tab_semana, tab_mes, tab_historicos = st.tabs([
     "🎯 HOY", "💬 AI COACH", "📅 PLAN SEMANAL", "📊 PLAN MENSUAL", "📈 HISTÓRICOS Y GRÁFICAS"
 ])
@@ -108,53 +94,52 @@ with tab_hoy:
     
     st.subheader("🚥 Semáforo de Predisposición de Carga")
     if hrv_actual < 40:
-        st.markdown("<div class='semaforo-rojo'><b>🔴 LUZ ROJA: Fatiga Central Detectada.</b><br>El SNC está deprimido. Evitar RIR bajos (fallo muscular) y series anaeróbicas. Priorizar flujo sanguíneo y recuperación activa.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='semaforo-rojo'><b>🔴 LUZ ROJA: Fatiga Central Detectada.</b><br>SNC deprimido. Evitar fallo muscular y series anaeróbicas lactácidas. Priorizar zona 2, flujo sanguíneo y recuperación activa.</div>", unsafe_allow_html=True)
     elif hrv_actual <= 45:
-        st.markdown("<div class='semaforo-amarillo'><b>🟡 LUZ AMARILLA: Precaución.</b><br>Capacidad moderada. Entrenar con volumen e intensidad controlados. RPE máximo de 7.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='semaforo-amarillo'><b>🟡 LUZ AMARILLA: Precaución.</b><br>Capacidad moderada. Entrenar con volumen e intensidad controlados. Dejar 2-3 repeticiones en recámara (RIR 2-3).</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div class='semaforo-verde'><b>🟢 LUZ VERDE: SNC Óptimo.</b><br>Tolerancia máxima al estrés. Vía libre para hipertrofia pesada, fuerza máxima o intervalos de VO2Max.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='semaforo-verde'><b>🟢 LUZ VERDE: SNC Óptimo.</b><br>Tolerancia máxima al estrés. Vía libre para hipertrofia pesada, fuerza máxima neural o intervalos de VO2Max en carrera.</div>", unsafe_allow_html=True)
     
     st.markdown("---")
-    st.header("🏃‍♂️ Prescripción de Sesión")
-    disciplina = st.selectbox("¿Qué disciplina toca hoy?", ["🏃‍♂️ Carrera / Trail", "🏋️‍♂️ Gimnasio", "🧗‍♂️ Otros (Rocódromo)", "🧘‍♂️ Descanso"])
+    st.header("🏃‍♂️ Prescripción Dinámica de la Sesión")
+    disciplina = st.selectbox("¿Qué disciplina vas a entrenar hoy?", ["🏃‍♂️ Carrera / Trail", "🏋️‍♂️ Gimnasio", "🧗‍♂️ Escalada (Rocódromo)", "🧘‍♂️ Descanso Activo"])
     
     if "Gimnasio" in disciplina:
         if hrv_actual < 40:
-            st.info("**Fuerza Metabólica (Alta Repetición / Bajo Peso)**")
-            st.write("**1. Zancadas peso corporal** (3 series x 20 reps)")
-            st.markdown("*Garmin: Walking Lunge*")
-            st.write("**2. Flexiones controladas** (3 series x 15 reps)")
-            st.markdown("*Garmin: Push-Up*")
-            st.write("**3. Remo mancuerna a un brazo** (3 series x 15 reps)")
-            st.markdown("*Garmin: One-Arm Dumbbell Row*")
+            st.info("**Objetivo: Fuerza Metabólica / Recuperación (Alta Repetición / Bajo Peso)**")
+            st.write("1. **Zancadas peso corporal** (3 series x 20 reps)")
+            st.write("2. **Flexiones controladas** (3 series x 15 reps)")
+            st.write("3. **Remo con mancuerna** (3 series x 15 reps)")
         else:
-            st.success("**Fuerza Máxima Neural (Baja Repetición / Alto Peso)**")
-            st.write("**1. Sentadilla Trasera con Barra** (4 series x 5 reps)")
-            st.markdown("*Garmin: Barbell Back Squat*")
-            st.write("**2. Peso Muerto Rumano** (3 series x 6 reps)")
-            st.markdown("*Garmin: Romanian Deadlift*")
-            st.write("**3. Dominadas Lastradas** (4 series x 5 reps)")
-            st.markdown("*Garmin: Weighted Pull-Up*")
+            st.success("**Objetivo: Fuerza Máxima / Hipertrofia (Alta Carga / Tensión Mecánica)**")
+            st.write("1. **Sentadilla Trasera con Barra** (4 series x 5-8 reps)")
+            st.write("2. **Peso Muerto Rumano** (3 series x 8-10 reps)")
+            st.write("3. **Dominadas Lastradas** (4 series x 5-6 reps)")
+            
     elif "Carrera" in disciplina:
-        st.info("Prescripción de carrera activa. (Restringido a Z2 si Luz Roja, abierto a Z5 si Luz Verde).")
+        if hrv_actual < 40:
+            st.info("**Objetivo: Regenerativo. Carrera continua suave estricta en Z2 (<148 ppm). Evitar desniveles fuertes.**")
+        else:
+            st.success("**Objetivo: Desarrollo de VO2 Max. Series de 400m en pista o cuestas cortas (Z4/Z5).**")
+            
     else:
-        st.info("Actividad de bajo impacto o descanso seleccionado.")
+        st.info("Prioridad: Movilidad articular, estiramientos suaves o descanso total. Escucha a tu cuerpo.")
 
 # ==========================================
 # PESTAÑA 2: CHAT INTELIGENTE NEURONAL
 # ==========================================
 with tab_chat:
-    st.header("💬 Sala de Control Híbrida")
-    st.write("Tu Coach analizará tu consulta teniendo en cuenta tus métricas actuales.")
+    st.header("💬 AI Coach Híbrido (Gemini 1.5 Flash)")
+    st.write("Plantea tus dudas de entrenamiento, ajusta tu plan o consulta sobre la interferencia entre carrera y pesas.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"¡Buenas Rodrigo! Tu VFC hoy es de {hrv_actual} ms. Sistema de diagnóstico activo."}]
+        st.session_state.messages = [{"role": "assistant", "content": f"¡Hola Rodrigo! Conexión Free Tier activa y segura. Tu VFC hoy es de {hrv_actual} ms. ¿Cómo planteamos el entrenamiento?"}]
         
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    if prompt := st.chat_input("Escribe tu duda, pide un plan o reporta sensaciones..."):
+    if prompt := st.chat_input("Escribe aquí tu consulta..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -162,40 +147,38 @@ with tab_chat:
         with st.chat_message("assistant"):
             if api_lista and model is not None:
                 try:
-                    instruccion_coach = f"""
-                    Eres el entrenador de rendimiento híbrido de Rodrigo. Basa tus decisiones en ciencia (2021-2026), 
-                    ignora rigideces obsoletas del ACSM y adapta el entreno a su VFC actual ({hrv_actual} ms). 
-                    Responde de forma directa, técnica y empática a lo siguiente: {prompt}
+                    # Contexto enriquecido para que la IA sepa en todo momento tus datos vitales
+                    contexto_base = f"""
+                    Eres el entrenador de rendimiento deportivo híbrido de Rodrigo.
+                    Datos fisiológicos de hoy de Rodrigo: HRV: {hrv_actual}ms, Body Battery: {body_battery}, Calidad Sueño: {sueno_puntuacion}.
+                    Basa tus consejos en la fisiología del ejercicio moderna. Sé conciso, técnico pero muy directo.
+                    Responde a lo siguiente: {prompt}
                     """
-                    respuesta_ia = model.generate_content(instruccion_coach)
+                    respuesta_ia = model.generate_content(contexto_base)
                     st.markdown(respuesta_ia.text)
                     st.session_state.messages.append({"role": "assistant", "content": respuesta_ia.text})
                 except Exception as e:
-                    error_msg = f"Error en la llamada de contenido: {e}"
-                    st.error(error_msg)
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    # Captura de errores en vivo para ver qué dice Google
+                    st.error(f"Error de conexión con Google: {str(e)}")
             else:
-                aviso = "⚠️ **Falta la conexión neuronal o los Secrets son incorrectos:** Revisa que hayas añadido la GOOGLE_API_KEY correctamente en la plataforma de Streamlit."
-                st.warning(aviso)
-                st.error(f"🔍 **Informe técnico del fallo (Diagnóstico):**\n\n{error_diagnostico}")
-                st.session_state.messages.append({"role": "assistant", "content": aviso})
+                st.warning("⚠️ La API Key no está configurada correctamente en los Secrets de Streamlit.")
 
 # ==========================================
 # PESTAÑAS 3 y 4: PLANES SEMANAL Y MENSUAL
 # ==========================================
 with tab_semana:
-    st.header("🗓️ Plan Semanal")
-    st.write("Estructura de la semana actual.")
+    st.header("🗓️ Microciclo Semanal")
+    st.write("Estructura de la semana actual. Sube tu CSV de calendario para actualizar.")
 
 with tab_mes:
-    st.header("📊 Objetivos del Mes (Macrociclo)")
-    st.write("Planificación mensual y focos estratégicos.")
+    st.header("📊 Macrociclo Mensual")
+    st.write("Focos estratégicos del mes.")
 
 # ==========================================
 # PESTAÑA 5: HISTÓRICOS Y GRÁFICAS
 # ==========================================
 with tab_historicos:
-    st.header("📈 Base de Datos Analítica (Últimas 52 Semanas)")
+    st.header("📈 Base de Datos Analítica")
     
     fechas_anual = pd.date_range(end=datetime.date(2026, 6, 6), periods=52, freq='W')
     df_anual = pd.DataFrame({
@@ -208,7 +191,6 @@ with tab_historicos:
         'Carga_Cronica': np.random.randint(450, 700, size=52)
     })
 
-    # 1. ESTADO DE CARGA DE ENTRENO
     st.subheader("1. Estado de Carga de Entrenamiento (Aguda vs Crónica)")
     fig_carga = go.Figure()
     fig_carga.add_trace(go.Scatter(x=df_anual['Fecha'], y=df_anual['Carga_Cronica'], fill='tozeroy', mode='none', name='Rango Óptimo (Crónica)', fillcolor='rgba(47, 133, 90, 0.4)'))
@@ -216,54 +198,23 @@ with tab_historicos:
     fig_carga.update_layout(template="plotly_dark", yaxis_title="Nivel de Carga", legend=dict(orientation="h", y=1.05))
     st.plotly_chart(fig_carga, use_container_width=True)
 
-    # 2. VFC Y FC REPOSO
     st.subheader("2. Evolución VFC y Frecuencia Cardíaca en Reposo")
     fig_salud = px.line(df_anual, x='Fecha', y=['HRV', 'FC_Reposo'], color_discrete_map={'HRV': '#ff4b4b', 'FC_Reposo': '#4299e1'}, template="plotly_dark")
     fig_salud.update_layout(yaxis_title="ms / ppm", legend_title_text="Métrica")
     st.plotly_chart(fig_salud, use_container_width=True)
 
-    # 3. RITMOS POR ZONA CARDIACA
-    st.subheader("3. Ritmos Medios (min/km) por Zona Cardiaca (Mes Actual)")
-    tabla_ritmos = pd.DataFrame({
-        "Periodo": ["Semana 1 (Junio)", "Semana 2 (Junio)", "Semana 3 (Junio)", "Mes Promedio (Mayo)"],
-        "Zona 1 (<130 ppm)": ["6:30", "6:25", "6:20", "6:40"],
-        "Zona 2 (131-148)": ["5:45", "5:40", "5:35", "5:55"],
-        "Zona 3 (149-162)": ["5:10", "5:05", "5:00", "5:15"],
-        "Zona 4 (163-175)": ["4:35", "4:30", "4:28", "4:40"],
-        "Zona 5 (>176 ppm)": ["4:00", "3:55", "3:50", "4:10"]
-    })
-    st.dataframe(tabla_ritmos, hide_index=True, use_container_width=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("3. Ritmos por Zona Cardiaca")
+        tabla_ritmos = pd.DataFrame({
+            "Zona": ["Z1 (<130 ppm)", "Z2 (131-148)", "Z3 (149-162)", "Z4 (163-175)", "Z5 (>176 ppm)"],
+            "Ritmo Medio (min/km)": ["6:25", "5:40", "5:05", "4:30", "3:55"]
+        })
+        st.dataframe(tabla_ritmos, hide_index=True, use_container_width=True)
 
-    # 4. KM RECORRIDOS Y VO2 MAX
-    st.subheader("4. Kilómetros Recorridos y VO2 Max")
-    fig_km = go.Figure()
-    fig_km.add_trace(go.Bar(x=df_anual['Fecha'], y=df_anual['Km'], name='Volumen (Km)', marker_color='#4a5568'))
-    fig_km.add_trace(go.Scatter(x=df_anual['Fecha'], y=df_anual['VO2Max'], name='VO2 Max', yaxis='y2', mode='lines+markers', line=dict(color='#ecc94b', width=3)))
-    fig_km.update_layout(
-        template="plotly_dark",
-        yaxis=dict(title="Kilómetros"),
-        yaxis2=dict(title="VO2 Max", overlaying="y", side="right", range=[40, 55]),
-        legend=dict(orientation="h", y=1.05)
-    )
-    st.plotly_chart(fig_km, use_container_width=True)
-
-    # 5. CARGAS GIMNASIO
-    st.subheader("5. Evolución de Cargas en Gimnasio")
-    datos_fuerza = pd.DataFrame({
-        "Grupo Muscular": ["Pierna", "Cadena Posterior", "Espalda", "Pecho/Hombro"],
-        "Ejercicio": ["Sentadilla Trasera", "Peso Muerto", "Dominadas Lastradas", "Press Banca"],
-        "Series x Reps": ["4 x 5", "3 x 5", "4 x 6", "3 x 8"],
-        "Peso Actual": ["100 kg", "120 kg", "+15 kg", "75 kg"],
-        "Peso Anterior": ["95 kg", "110 kg", "+10 kg", "70 kg"],
-        "Última Actualización": ["01 Jun 2026", "03 Jun 2026", "28 May 2026", "29 May 2026"]
-    })
-    st.dataframe(datos_fuerza, hide_index=True, use_container_width=True)
-
-    # 6. GRADOS EN ROCO
-    st.subheader("6. Progresión en Escalada (Rocódromo)")
-    meses_escalada = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun']
-    fig_escalada = go.Figure()
-    fig_escalada.add_trace(go.Scatter(x=meses_escalada, y=[3, 3, 4, 4, 5, 5], mode='lines+markers', name='Bloque (Escala V)', line=dict(color='#ff9900', width=3)))
-    fig_escalada.add_trace(go.Scatter(x=meses_escalada, y=[4, 5, 5, 6, 6, 7], mode='lines+markers', name='Deportiva (Grado Relativo)', line=dict(color='#00cc99', width=3)))
-    fig_escalada.update_layout(template="plotly_dark", yaxis_title="Nivel de Grado", legend=dict(orientation="h", y=1.05))
-    st.plotly_chart(fig_escalada, use_container_width=True)
+    with c2:
+        st.subheader("4. Progresión Escalada (Grado)")
+        fig_escalada = go.Figure()
+        fig_escalada.add_trace(go.Scatter(x=['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'], y=[3, 3, 4, 4, 5, 5], mode='lines+markers', name='Bloque (V)', line=dict(color='#ff9900', width=3)))
+        fig_escalada.update_layout(template="plotly_dark", yaxis_title="Grado", margin=dict(l=0, r=0, t=30, b=0))
+        st.plotly_chart(fig_escalada, use_container_width=True)
